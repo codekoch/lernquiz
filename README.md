@@ -14,7 +14,7 @@ Lade die Datei index.html lherunter oder klcike einach hier <a href=https://code
 
 Erstelle deine Fragen oder lass dir ein json TEmplate mit Hilfe einer KI erstellen (optionale kann der Editor auch direkt einen Quiz per KI erstellen, wenn du einen validen API-Key eingibst.)
 
-Klicke auf "HTML Export", um dein fertiges Quiz zu erhalten.
+Klicke auf "HTML Export", um dein fertiges Quiz zu erhalten (Hier ein Beispiel: <a href=https://codekoch.github.io/lernquiz/lernquiz_-ganzrationale-funktionen.html>lernquiz_-ganzrationale-funktionen.html</a>.
 
 🛠 Bedienungsanleitung
 
