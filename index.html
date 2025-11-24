@@ -40,7 +40,7 @@
         const XCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></IconBase>;
         const Upload = (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></IconBase>;
         const Save = (p) => <IconBase {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></IconBase>;
-        const Sparkles = (p) => <IconBase {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></IconBase>;
+        const Sparkles = (p) => <IconBase {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z"></path></IconBase>;
         const Loader2 = (p) => <IconBase {...p} className={`${p.className} animate-spin`}><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></IconBase>;
         const Key = (p) => <IconBase {...p}><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></IconBase>;
         const FileJson = (p) => <IconBase {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M10 13a2 2 0 0 0 1.7 1.2 2 2 0 0 0 1.6-1.2"></path></IconBase>;
@@ -240,7 +240,7 @@
 
             const generateHTML = () => {
                 const quizData = JSON.stringify({ title, questions, passPercentage });
-                // Note: In the standalone version, we use the same template string logic
+                
                 const htmlContent = `<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -270,7 +270,24 @@
 <div id="app" class="quiz-container"></div>
 <script>
     const quizConfig = ${quizData};
-    let idx = 0, score = 0, state = 'q', sel = null;
+    
+    // --- Randomization Logic ---
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+    // Shuffle questions
+    shuffleArray(quizConfig.questions);
+    // Shuffle answers for each question
+    quizConfig.questions.forEach(q => {
+        if (q.options) {
+            shuffleArray(q.options);
+        }
+    });
+
+    let idx = 0, score = 0, state = 'q', sel = [];
     const app = document.getElementById('app');
     
     function render() {
@@ -287,17 +304,24 @@
         const q = quizConfig.questions[idx];
         let opts = q.options.map(o => {
             let cls = 'option-btn';
+            const isSel = sel.includes(o.id);
             if(state==='f') {
                 if(o.correct) cls += ' correct';
-                else if(o.id===sel && !o.correct) cls += ' wrong';
-            } else if(sel===o.id) cls += ' selected';
+                else if(isSel && !o.correct) cls += ' wrong';
+            } else if(isSel) cls += ' selected';
             return \`<button class="\${cls}" onclick="selOpt('\${o.id}')" \${state==='f'?'disabled':''}>\${o.text}</button>\`;
         }).join('');
         
         let fb = '';
         if(state==='f') {
-            const sOpt = q.options.find(o=>o.id===sel);
-            fb = \`<div class="feedback \${sOpt?.correct?'correct':'wrong'}"><strong>\${sOpt?.correct?'Richtig':'Falsch'}</strong><br>\${sOpt?.feedback||''}</div>\`;
+            const correctIds = q.options.filter(o=>o.correct).map(o=>o.id);
+            const isCorrect = sel.length === correctIds.length && sel.every(val => correctIds.includes(val));
+            const items = q.options.filter(o=>sel.includes(o.id) && o.feedback).map(o => \`<li><strong>\${o.text}:</strong> \${o.feedback}</li>\`).join('');
+            
+            fb = \`<div class="feedback \${isCorrect?'correct':'wrong'}">
+                <strong>\${isCorrect?'Richtig!':'Leider nicht ganz richtig.'}</strong><br>
+                \${items ? '<ul style="margin-top:8px; padding-left:20px; list-style-type:disc">' + items + '</ul>' : ''}
+            </div>\`;
         }
 
         app.innerHTML = \`<div class="header">\${quizConfig.title}</div>
@@ -305,17 +329,28 @@
         <div class="content">
             <h3>Frage \${idx+1}</h3>
             <p style="font-size:1.1rem; white-space: pre-wrap;">\${q.text}</p>
+            <div style="font-size:0.9em; color:#666; margin-bottom:10px; font-style:italic">Mehrere Antworten möglich</div>
             \${opts}
             \${fb}
             <div style="margin-top:20px; overflow:hidden">
-                <button class="btn-primary" onclick="\${state==='q'?'check()':'next()'}" \${state==='q' && !sel ? 'disabled' : ''}>\${state==='q'?'Prüfen':(idx<quizConfig.questions.length-1?'Weiter':'Ergebnis')}</button>
+                <button class="btn-primary" onclick="\${state==='q'?'check()':'next()'}" \${state==='q' && sel.length===0 ? 'disabled' : ''}>\${state==='q'?'Prüfen':(idx<quizConfig.questions.length-1?'Weiter':'Ergebnis')}</button>
             </div>
         </div>\`;
         if(window.MathJax) window.MathJax.typesetPromise();
     }
-    window.selOpt = id => { if(state==='q') { sel=id; render(); } };
-    window.check = () => { state='f'; if(quizConfig.questions[idx].options.find(o=>o.id===sel)?.correct) score++; render(); };
-    window.next = () => { if(idx<quizConfig.questions.length-1) { idx++; state='q'; sel=null; render(); } else { state='res'; render(); } };
+    window.selOpt = id => { 
+        if(state!=='q') return;
+        const i = sel.indexOf(id);
+        if(i===-1) sel.push(id); else sel.splice(i,1);
+        render(); 
+    };
+    window.check = () => { 
+        state='f'; 
+        const correctIds = quizConfig.questions[idx].options.filter(o=>o.correct).map(o=>o.id);
+        if(sel.length === correctIds.length && sel.every(val => correctIds.includes(val))) score++; 
+        render(); 
+    };
+    window.next = () => { if(idx<quizConfig.questions.length-1) { idx++; state='q'; sel=[]; render(); } else { state='res'; render(); } };
     render();
 <\/script>
 </body>
