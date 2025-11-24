@@ -8,7 +8,7 @@ Das Besondere: Der Editor läuft komplett im Browser (als einzelne HTML-Datei) u
 
 🚀 Schnellstart
 
-Lade die Datei index.html lherunter oder klcike einach hier <a href=https://codekoch.github.io/lernquiz/>lernquiz</a>.
+Lade die Datei index.html herunter oder klicke einach hier <a href=https://codekoch.github.io/lernquiz/>lernquiz</a>.
 
 Öffne sie mit einem modernen Browser (Chrome, Edge, Firefox).
 
