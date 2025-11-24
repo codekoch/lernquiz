@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Builder (Offline Edition)</title>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- MathJax for Rendering in Editor Preview -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Segoe UI', sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        // --- Icons (Inline SVGs to avoid dependencies) ---
+        const IconBase = ({ children, size = 20, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+        const Plus = (p) => <IconBase {...p}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></IconBase>;
+        const Trash2 = (p) => <IconBase {...p}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></IconBase>;
+        const Download = (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></IconBase>;
+        const Edit3 = (p) => <IconBase {...p}><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></IconBase>;
+        const XCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></IconBase>;
+        const Upload = (p) => <IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></IconBase>;
+        const Save = (p) => <IconBase {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></IconBase>;
+        const Sparkles = (p) => <IconBase {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></IconBase>;
+        const Loader2 = (p) => <IconBase {...p} className={`${p.className} animate-spin`}><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></IconBase>;
+        const Key = (p) => <IconBase {...p}><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></IconBase>;
+        const FileJson = (p) => <IconBase {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M10 13a2 2 0 0 0 1.7 1.2 2 2 0 0 0 1.6-1.2"></path></IconBase>;
+        const Clipboard = (p) => <IconBase {...p}><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></IconBase>;
+
+        // --- Main App ---
+        const QuizBuilder = () => {
+            const [title, setTitle] = useState("Mein Offline Quiz");
+            const [passPercentage, setPassPercentage] = useState(80);
+            const [questions, setQuestions] = useState([
+                {
+                    id: 1,
+                    text: "Dies ist eine Frage im Offline-Modus. Du kannst das Quiz unten als HTML herunterladen.",
+                    options: [
+                        { id: 'opt1', text: "Antwort A", correct: true, feedback: "Korrekt!" },
+                        { id: 'opt2', text: "Antwort B", correct: false, feedback: "Leider falsch." }
+                    ]
+                }
+            ]);
+            const [activeTab, setActiveTab] = useState('edit');
+            const fileInputRef = useRef(null);
+
+            // AI State
+            const [aiPrompt, setAiPrompt] = useState("");
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [aiError, setAiError] = useState("");
+            const [showAiInput, setShowAiInput] = useState(false);
+            const [userApiKey, setUserApiKey] = useState(""); 
+
+            // JSON Paste State
+            const [showJsonModal, setShowJsonModal] = useState(false);
+            const [jsonText, setJsonText] = useState("");
+
+            // --- Logic ---
+            const addQuestion = () => {
+                const newId = questions.length > 0 ? Math.max(...questions.map(q => q.id)) + 1 : 1;
+                setQuestions([...questions, {
+                    id: newId,
+                    text: "Neue Frage...",
+                    options: [
+                        { id: `opt${Date.now()}-1`, text: "Richtige Antwort", correct: true, feedback: "" },
+                        { id: `opt${Date.now()}-2`, text: "Falsche Antwort", correct: false, feedback: "" }
+                    ]
+                }]);
+            };
+
+            const removeQuestion = (qId) => setQuestions(questions.filter(q => q.id !== qId));
+            
+            const updateQuestionText = (qId, txt) => setQuestions(questions.map(q => q.id === qId ? { ...q, text: txt } : q));
+
+            const addOption = (qId) => {
+                setQuestions(questions.map(q => {
+                    if (q.id === qId) {
+                        return { ...q, options: [...q.options, { id: `opt${Date.now()}`, text: "Neue Option", correct: false, feedback: "" }] };
+                    }
+                    return q;
+                }));
+            };
+
+            const removeOption = (qId, optId) => {
+                setQuestions(questions.map(q => {
+                    if (q.id === qId) return { ...q, options: q.options.filter(o => o.id !== optId) };
+                    return q;
+                }));
+            };
+
+            const updateOption = (qId, optId, field, value) => {
+                setQuestions(questions.map(q => {
+                    if (q.id === qId) {
+                        const newOptions = q.options.map(o => {
+                            if (o.id === optId) return { ...o, [field]: value };
+                            return o;
+                        });
+                        return { ...q, options: newOptions };
+                    }
+                    return q;
+                }));
+            };
+
+            // --- AI Logic (Client Side) ---
+            const generateAIQuestion = async () => {
+                if (!aiPrompt.trim()) return;
+                if (!userApiKey.trim()) {
+                    setAiError("Bitte gib zuerst einen Google Gemini API Key in den Einstellungen an.");
+                    return;
+                }
+                
+                setIsGenerating(true);
+                setAiError("");
+
+                const systemPrompt = `
+                  You are an expert educational content generator.
+                  Generate quiz questions in German based on the user's prompt.
+                  If the user asks for a number of questions, generate that many (max 10). Otherwise generate 1.
+                  Return ONLY a JSON object with this structure:
+                  {
+                    "questions": [
+                      {
+                        "text": "Question text (LaTeX allowed)",
+                        "options": [
+                           { "text": "A1", "correct": boolean, "feedback": "Explanation" },
+                           { "text": "A2", "correct": boolean, "feedback": "Explanation" }
+                        ]
+                      }
+                    ]
+                  }
+                `;
+
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${userApiKey}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: `User Prompt: ${aiPrompt}` }] }],
+                            systemInstruction: { parts: [{ text: systemPrompt }] },
+                            generationConfig: { responseMimeType: "application/json" }
+                        })
+                    });
+
+                    if (!response.ok) throw new Error("API Request failed (Check your Key)");
+                    const data = await response.json();
+                    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (!generatedText) throw new Error("No content generated");
+
+                    const parsedData = JSON.parse(generatedText);
+                    const newQuestionsRaw = parsedData.questions || (parsedData.text ? [parsedData] : []);
+
+                    let currentIdCounter = questions.length > 0 ? Math.max(...questions.map(q => q.id)) : 0;
+                    const formattedQuestions = newQuestionsRaw.map((q) => {
+                        currentIdCounter++;
+                        return {
+                            id: currentIdCounter,
+                            text: q.text,
+                            options: q.options.map((opt, idx) => ({
+                                id: `opt${Date.now()}-${currentIdCounter}-${idx}`,
+                                text: opt.text,
+                                correct: opt.correct,
+                                feedback: opt.feedback
+                            }))
+                        };
+                    });
+
+                    setQuestions([...questions, ...formattedQuestions]);
+                    setAiPrompt("");
+                } catch (err) {
+                    console.error(err);
+                    setAiError("Fehler: " + err.message);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            // --- IO Logic ---
+            const loadJsonData = (json) => {
+                if (json.title) setTitle(json.title);
+                if (json.passPercentage) setPassPercentage(json.passPercentage);
+                if (Array.isArray(json.questions)) setQuestions(json.questions);
+                alert("Quiz erfolgreich geladen!");
+            };
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const json = JSON.parse(e.target.result);
+                        loadJsonData(json);
+                    } catch (error) { alert("Fehler beim Laden."); }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            const handleJsonPasteLoad = () => {
+                try {
+                    const json = JSON.parse(jsonText);
+                    loadJsonData(json);
+                    setShowJsonModal(false);
+                    setJsonText("");
+                } catch (error) {
+                    alert("Das ist kein gültiges JSON.");
+                }
+            };
+
+            const saveProjectJSON = () => {
+                const projectData = JSON.stringify({ title, passPercentage, questions }, null, 2);
+                const blob = new Blob([projectData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${title.replace(/\s+/g, '-').toLowerCase()}-project.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+
+            const generateHTML = () => {
+                const quizData = JSON.stringify({ title, questions, passPercentage });
+                // Note: In the standalone version, we use the same template string logic
+                const htmlContent = `<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"><\/script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"><\/script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f3f4f6; padding: 20px; display: flex; justify-content: center; }
+        .quiz-container { background: white; width: 100%; max-width: 700px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: #1a73e8; color: white; padding: 20px; font-weight: bold; font-size: 1.2rem; }
+        .content { padding: 24px; }
+        .option-btn { display: block; width: 100%; text-align: left; padding: 15px; margin-bottom: 10px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; cursor: pointer; }
+        .option-btn:hover { background: #eff6ff; border-color: #93c5fd; }
+        .option-btn.selected { border-color: #1a73e8; background: #eff6ff; font-weight: bold; }
+        .option-btn.correct { background: #d1fae5; border-color: #10b981; color: #065f46; }
+        .option-btn.wrong { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
+        .feedback { margin-top: 15px; padding: 15px; border-radius: 6px; }
+        .feedback.correct { background: #ecfdf5; color: #047857; border-left: 5px solid #10b981; }
+        .feedback.wrong { background: #fef2f2; color: #b91c1c; border-left: 5px solid #ef4444; }
+        .btn-primary { background: #1a73e8; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; float: right; margin-bottom: 20px;}
+        .result-circle { width: 100px; height: 100px; border-radius: 50%; background: #1a73e8; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 0 auto; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div id="app" class="quiz-container"></div>
+<script>
+    const quizConfig = ${quizData};
+    let idx = 0, score = 0, state = 'q', sel = null;
+    const app = document.getElementById('app');
+    
+    function render() {
+        if(state === 'res') {
+            const pct = Math.round((score/quizConfig.questions.length)*100);
+            app.innerHTML = \`<div class="header">Ergebnis</div><div class="content" style="text-align:center">
+                <div class="result-circle" style="background:\${pct>=${passPercentage}?'#10b981':'#ef4444'}">\${pct}%</div>
+                <h2>\${pct>=${passPercentage}?'Bestanden!':'Nicht bestanden'}</h2>
+                <p>\${score} von \${quizConfig.questions.length} Punkten.</p>
+                <button class="btn-primary" onclick="location.reload()" style="float:none">Neustart</button>
+            </div>\`;
+            return;
+        }
+        const q = quizConfig.questions[idx];
+        let opts = q.options.map(o => {
+            let cls = 'option-btn';
+            if(state==='f') {
+                if(o.correct) cls += ' correct';
+                else if(o.id===sel && !o.correct) cls += ' wrong';
+            } else if(sel===o.id) cls += ' selected';
+            return \`<button class="\${cls}" onclick="selOpt('\${o.id}')" \${state==='f'?'disabled':''}>\${o.text}</button>\`;
+        }).join('');
+        
+        let fb = '';
+        if(state==='f') {
+            const sOpt = q.options.find(o=>o.id===sel);
+            fb = \`<div class="feedback \${sOpt?.correct?'correct':'wrong'}"><strong>\${sOpt?.correct?'Richtig':'Falsch'}</strong><br>\${sOpt?.feedback||''}</div>\`;
+        }
+
+        app.innerHTML = \`<div class="header">\${quizConfig.title}</div>
+        <div style="height:5px; background:#eee"><div style="height:100%; width:\${(idx/quizConfig.questions.length)*100}%; background:#fbbf24; transition:0.3s"></div></div>
+        <div class="content">
+            <h3>Frage \${idx+1}</h3>
+            <p style="font-size:1.1rem; white-space: pre-wrap;">\${q.text}</p>
+            \${opts}
+            \${fb}
+            <div style="margin-top:20px; overflow:hidden">
+                <button class="btn-primary" onclick="\${state==='q'?'check()':'next()'}" \${state==='q' && !sel ? 'disabled' : ''}>\${state==='q'?'Prüfen':(idx<quizConfig.questions.length-1?'Weiter':'Ergebnis')}</button>
+            </div>
+        </div>\`;
+        if(window.MathJax) window.MathJax.typesetPromise();
+    }
+    window.selOpt = id => { if(state==='q') { sel=id; render(); } };
+    window.check = () => { state='f'; if(quizConfig.questions[idx].options.find(o=>o.id===sel)?.correct) score++; render(); };
+    window.next = () => { if(idx<quizConfig.questions.length-1) { idx++; state='q'; sel=null; render(); } else { state='res'; render(); } };
+    render();
+<\/script>
+</body>
+</html>`;
+                
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `quiz-${title.replace(/\s+/g, '-').toLowerCase()}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+
+            // --- Render ---
+            return (
+                <div className="flex flex-col h-screen max-w-5xl mx-auto bg-white shadow-xl my-4 rounded-xl overflow-hidden relative">
+                    {/* JSON Modal */}
+                    {showJsonModal && (
+                        <div className="absolute inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl flex flex-col gap-4">
+                                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Clipboard /> JSON Code einfügen</h3>
+                                <p className="text-sm text-gray-500">Kopiere den Inhalt deiner .json Datei oder eines Templates direkt hier hinein.</p>
+                                <textarea 
+                                    className="w-full h-64 border rounded p-3 font-mono text-sm bg-gray-50 focus:ring-2 ring-blue-200 outline-none"
+                                    placeholder='{ "title": "...", "questions": [...] }'
+                                    value={jsonText}
+                                    onChange={(e) => setJsonText(e.target.value)}
+                                ></textarea>
+                                <div className="flex justify-end gap-3">
+                                    <button onClick={() => setShowJsonModal(false)} className="px-4 py-2 rounded border hover:bg-gray-100">Abbrechen</button>
+                                    <button onClick={handleJsonPasteLoad} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 font-bold">Quiz Laden</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
+                        <h1 className="text-xl font-bold flex items-center gap-2"><Edit3 size={24}/> QuizBuilder <span className="text-xs bg-yellow-500 text-black px-2 rounded">OFFLINE</span></h1>
+                        <div className="flex gap-2">
+                            <input type="file" accept=".json" ref={fileInputRef} style={{display:'none'}} onChange={handleFileUpload}/>
+                            <button onClick={() => fileInputRef.current.click()} className="flex gap-2 items-center bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-sm"><Upload size={16}/> Laden</button>
+                            <button onClick={() => setShowJsonModal(true)} className="flex gap-2 items-center bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-sm"><FileJson size={16}/> JSON Text</button>
+                            <button onClick={saveProjectJSON} className="flex gap-2 items-center bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-sm"><Save size={16}/> Speichern</button>
+                            <button onClick={generateHTML} className="flex gap-2 items-center bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded text-sm font-bold"><Download size={16}/> HTML Export</button>
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-slate-100 border-b flex gap-4 items-center">
+                         <div className="flex-grow">
+                            <label className="text-xs font-bold text-slate-500 uppercase">Quiz Titel</label>
+                            <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full bg-transparent border-b border-slate-300 focus:border-blue-500 outline-none text-lg font-bold text-slate-800"/>
+                         </div>
+                    </div>
+
+                    <div className="flex-grow overflow-auto p-6 bg-gray-50">
+                        {/* AI / Settings Section */}
+                        <div className="bg-white p-4 rounded-lg shadow-sm border border-indigo-100 mb-6">
+                            <div className="flex justify-between items-center cursor-pointer" onClick={() => setShowAiInput(!showAiInput)}>
+                                <h3 className="font-bold text-indigo-700 flex items-center gap-2"><Sparkles size={18}/> KI-Generator & Einstellungen</h3>
+                                <span className="text-xs text-indigo-400">{showAiInput ? 'Einklappen' : 'Ausklappen'}</span>
+                            </div>
+                            
+                            {showAiInput && (
+                                <div className="mt-4 space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><Key size={12}/> Google Gemini API Key (Benötigt für KI)</label>
+                                        <input 
+                                            type="password"
+                                            value={userApiKey} 
+                                            onChange={e=>setUserApiKey(e.target.value)} 
+                                            placeholder="Hier API Key einfügen..." 
+                                            className="w-full border p-2 rounded text-sm bg-gray-50 focus:bg-white transition-colors"
+                                        />
+                                        <p className="text-xs text-gray-400 mt-1">Der Key wird nur lokal im Browser verwendet und nicht gespeichert. Ohne Key funktioniert der manuelle Editor trotzdem.</p>
+                                    </div>
+                                    <div className="flex gap-2 pt-2 border-t border-gray-100">
+                                        <input 
+                                            value={aiPrompt} 
+                                            onChange={e=>setAiPrompt(e.target.value)}
+                                            onKeyDown={e=>e.key==='Enter' && generateAIQuestion()}
+                                            placeholder="z.B. 'Erstelle 5 Fragen über Thermodynamik'" 
+                                            className="flex-grow border p-2 rounded focus:ring-2 ring-indigo-200 outline-none"
+                                        />
+                                        <button onClick={generateAIQuestion} disabled={isGenerating} className="bg-indigo-600 text-white px-4 rounded font-bold hover:bg-indigo-700 flex items-center gap-2">
+                                            {isGenerating ? <Loader2 size={18}/> : <Sparkles size={18}/>} Generieren
+                                        </button>
+                                    </div>
+                                    {aiError && <div className="text-red-500 text-sm bg-red-50 p-2 rounded border border-red-100">{aiError}</div>}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Questions List */}
+                        {questions.map((q, idx) => (
+                            <div key={q.id} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-4 relative group">
+                                <div className="absolute top-4 right-4 text-gray-300 group-hover:text-red-400 cursor-pointer transition-colors" onClick={()=>removeQuestion(q.id)}>
+                                    <Trash2 size={20}/>
+                                </div>
+                                <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Frage {idx+1}</h4>
+                                <textarea 
+                                    value={q.text} 
+                                    onChange={e=>updateQuestionText(q.id, e.target.value)} 
+                                    className="w-full border-2 border-gray-100 rounded p-3 mb-4 focus:border-blue-400 outline-none transition-colors"
+                                    rows={2}
+                                />
+                                <div className="space-y-2 pl-4 border-l-4 border-gray-100">
+                                    {q.options.map((opt, oIdx) => (
+                                        <div key={opt.id} className="flex gap-2 items-start">
+                                            <input type="checkbox" checked={opt.correct} onChange={e=>updateOption(q.id, opt.id, 'correct', e.target.checked)} className="mt-3 w-5 h-5 accent-green-600"/>
+                                            <div className="flex-grow space-y-1">
+                                                <input 
+                                                    value={opt.text} 
+                                                    onChange={e=>updateOption(q.id, opt.id, 'text', e.target.value)} 
+                                                    placeholder="Antworttext..." 
+                                                    className={`w-full border-b ${opt.correct ? 'border-green-200 bg-green-50' : 'border-gray-200'} p-1 px-2 outline-none focus:border-blue-400`}
+                                                />
+                                                <input 
+                                                    value={opt.feedback} 
+                                                    onChange={e=>updateOption(q.id, opt.id, 'feedback', e.target.value)} 
+                                                    placeholder="Feedback (optional)" 
+                                                    className="w-full text-xs text-gray-500 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-gray-300 p-1 px-2 outline-none"
+                                                />
+                                            </div>
+                                            <button onClick={()=>removeOption(q.id, opt.id)} className="mt-2 text-gray-300 hover:text-red-500"><XCircle size={16}/></button>
+                                        </div>
+                                    ))}
+                                    <button onClick={()=>addOption(q.id)} className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 mt-2"><Plus size={14}/> Option hinzufügen</button>
+                                </div>
+                            </div>
+                        ))}
+
+                        <div className="text-center py-8">
+                            <button onClick={addQuestion} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-bold shadow-lg transform hover:scale-105 transition-all flex items-center gap-2 mx-auto">
+                                <Plus size={20}/> Frage hinzufügen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<QuizBuilder />);
+    </script>
+</body>
+</html>
